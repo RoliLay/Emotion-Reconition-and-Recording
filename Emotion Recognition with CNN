@@ -1,0 +1,124 @@
+import numpy as np
+import pandas as pd
+from tensorflow import keras
+from tensorflow.keras import layers
+import os
+import matplotlib.pyplot as plt
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Activation, Conv2D, MaxPool2D, Flatten, Dropout, BatchNormalization
+import cv2
+import tensorflow as tf
+
+
+#prepare database
+path = "D:\Chula\Project\Lab\kaggle\input\challenges-in-representation-learning-facial-expression-recognition-challenge\icml_face_data.csv"
+data = pd.read_csv(path)
+
+emotion = {0: 'Angry', 1: 'Disgust', 2: 'Fear', 3: 'Happy', 4: 'Sad', 5: 'Surprise', 6: 'Neutral'}
+
+
+# Output: Image in right shaped and normalized + labels
+def parse_data(data):
+    image_array = np.zeros(shape=(len(data), 48, 48, 1))
+    image_label = np.array(list(map(int, data['emotion'])))
+
+    for i, row in enumerate(data.index):
+        image = np.fromstring(data.loc[row, 'pixels'], dtype=int, sep=' ')
+        image = np.reshape(image, (48, 48, 1))
+        image_array[i] = image
+
+    return image_array, image_label
+
+
+# Splitting the data into train, validation and testing set
+X_train, y_train = parse_data(data[data[" Usage"] == "Training"])
+X_val, y_val = parse_data(data[data[" Usage"] == "PrivateTest"])
+X_test, y_test = parse_data(data[data[" Usage"] == "PublicTest"])
+
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+datagen = ImageDataGenerator(
+    featurewise_center=True,
+    featurewise_std_normalization=True,
+    rescale=1./255,
+    rotation_range = 20,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    horizontal_flip=True,
+    zoom_range = 0.2,
+    shear_range=0.05)
+datagen.fit(X_train)
+
+test_datagen = ImageDataGenerator(rescale=1./255)
+test_datagen.fit(X_test)
+val_datagen = ImageDataGenerator(
+    featurewise_center=True,
+    featurewise_std_normalization=True,
+    rescale=1./255,
+    rotation_range = 20,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
+    horizontal_flip=True,
+    zoom_range = 0.2,
+    shear_range=0.05)
+val_datagen.fit(X_val)
+
+# Building a CNN model
+# Conv#1> Pool#1 > Conv#2 > Pool#2 > Conv#3 > Pool#3 > FC
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.layers import Dense, Input, Dropout,Flatten, Conv2D
+from tensorflow.keras.layers import BatchNormalization, Activation, MaxPooling2D
+from tensorflow.keras.models import Model, Sequential
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau
+from tensorflow.keras.utils import plot_model
+
+model = keras.Sequential()
+
+model.add(layers.Conv2D(input_shape=(48,48,1) ,
+                        filters=32, kernel_size=(3, 3), activation='relu'))
+model.add(Activation('elu'))
+model.add(BatchNormalization())
+model.add(layers.MaxPooling2D())
+model.add(Dropout(0.25))
+
+model.add(layers.Conv2D(64, kernel_size=(3, 3), activation='relu'))
+model.add(Activation('relu'))
+model.add(BatchNormalization())
+model.add(layers.MaxPooling2D())
+model.add(Dropout(0.25))
+
+model.add(layers.Conv2D(128, kernel_size=(3, 3), activation='relu'))
+model.add(Activation('elu'))
+model.add(BatchNormalization())
+model.add(layers.MaxPooling2D())
+model.add(Dropout(0.25))
+
+model.add(layers.Conv2D(256, kernel_size=(3, 3), activation='relu'))
+model.add(BatchNormalization())
+model.add(Activation('relu'))
+model.add(layers.MaxPooling2D())
+model.add(Dropout(0.25))
+
+
+model.add(layers.Flatten())
+model.add(layers.Dense(units=256, activation='relu'))
+model.add(layers.Dense(units=128, activation='elu'))
+model.add(Dropout(0.25))
+model.add(layers.Dense(units=7, activation = 'softmax'))
+
+model.compile(loss=keras.losses.SparseCategoricalCrossentropy(), optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+              metrics=['accuracy'])
+
+model.summary()
+earlystop = tf.keras.callbacks.EarlyStopping(patience=10, min_delta=1e-4, restore_best_weights=True)
+lr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', patience=3, verbose=1, factor=0.5, min_lr=1e-7)
+
+history = model.fit(X_train, y_train,
+                    validation_data=(X_val, y_val),
+                    shuffle=True,
+                    epochs=50,
+                    batch_size=128,
+                    callbacks=[earlystop, lr])
+
+from tensorflow import keras
+model = keras.models.load_model('C:\Users\User')
